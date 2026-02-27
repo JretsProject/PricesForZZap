@@ -1,0 +1,42 @@
+# Виртуальное окружение
+.venv/
+venv/
+env/
+ENV/
+
+# Кэш Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# Файлы данных и логи
+data/
+logs/
+*.log
+
+# Конфигурация с секретами
+.env
+
+# Реестр обработанных файлов
+data/registry.json
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Системные файлы Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Папки для моделей (если будут)
+models/
