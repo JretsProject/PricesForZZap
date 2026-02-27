@@ -20,6 +20,9 @@ REGISTRY_PATH = BASE_DIR / os.getenv("REGISTRY_PATH", "data/registry.json")
 LOG_PATH = BASE_DIR / os.getenv("LOG_PATH", "logs/app.log")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
+# Архив
+ARCHIVE_FOLDER = BASE_DIR / "data/archive"
+
 # ----- Стоп-слова, разбитые по категориям -----
 
 # Географические указатели (части составных наименований)
