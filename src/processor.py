@@ -62,6 +62,8 @@ def clean_manufacturer(text: str) -> str:
 
     # Удаляем скобки всех видов: квадратные, круглые, фигурные
     text = re.sub(r'[\[\]\(\)\{\}]', '', text)
+    # Удаляем одиночное "г." с пробелом
+    text = re.sub(r'\bг\.\s*', '', text)
     # Удаляем лишние пробелы и знаки препинания по краям
     text = re.sub(r'\s+', ' ', text).strip()
     text = text.strip(' ,.;:-')
