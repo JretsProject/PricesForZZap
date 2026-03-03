@@ -1,4 +1,5 @@
 import os
+import json
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -20,7 +21,7 @@ REGISTRY_PATH = BASE_DIR / os.getenv("REGISTRY_PATH", "data/registry.json")
 LOG_PATH = BASE_DIR / os.getenv("LOG_PATH", "logs/app.log")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
-# Архив
+# Архивная папка
 ARCHIVE_FOLDER = BASE_DIR / "data/archive"
 
 # ----- Стоп-слова, разбитые по категориям -----
@@ -43,6 +44,7 @@ COUNTRIES = [
     "Украина",
     "Беларусь",
     "Казахстан",
+    "Италия",
     # Добавляйте по мере необходимости
 ]
 
@@ -55,20 +57,45 @@ REGIONS = [
     # Добавляйте по мере необходимости
 ]
 
-# Города
-CITIES = [
-    "Гатчина",
-    "Рославль",
+# Города (основной список загружается из файла, плюс ручное дополнение)
+CITIES = []
+EXTRA_CITIES = [
+    "Королев",
     "Н-Челны",
-    "Набережные Челны",
-    # ...
+    "Н-челны",
+    "Н-Челны",
+    "Гродно",
+    "Наб Челны",
+    "Московск",
+    "Борисов",
+    "Камида",
+    # Если каких-то городов нет в JSON, можно добавить вручную, например:
+    # "Гатчина", "Рославль", "Н-Челны", "Набережные Челны"
 ]
 
-# Общий список стоп-слов (может пригодиться для простой фильтрации)
-# Собираем из всех категорий, но исключаем указатели с точкой, если нужно
+# Загружаем города из JSON-файла, если он существует
+cities_json_path = BASE_DIR / "data" / "russian-cities.json"
+if cities_json_path.exists():
+    try:
+        with open(cities_json_path, 'r', encoding='utf-8') as f:
+            cities_data = json.load(f)
+            # В файле массив объектов с полем "name" (название города)
+            # Извлекаем все названия городов
+            CITIES = [city["name"] for city in cities_data if "name" in city]
+            print(f"Загружено {len(CITIES)} городов из JSON")
+    except Exception as e:
+        print(f"Ошибка загрузки городов из JSON: {e}")
+        CITIES = []
+else:
+    print(f"Файл с городами не найден: {cities_json_path}")
+
+# Добавляем ручной список
+CITIES.extend(EXTRA_CITIES)
+# Убираем дубликаты
+CITIES = list(set(CITIES))
+
+# Общий список стоп-слов (для быстрой проверки)
 STOP_WORDS = list(set(GEO_INDICATORS + COUNTRIES + REGIONS + CITIES))
-# Можно убрать "г.", если он будет обрабатываться отдельно через регулярки
-# Но пока оставим как есть.
 
 # Регулярные выражения для удаления конструкций
 PATTERNS = [

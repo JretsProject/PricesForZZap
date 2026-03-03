@@ -11,11 +11,6 @@ from src.processor import process_excel, archive_original
 
 
 def check_and_process() -> bool:
-    """
-    Проверяет наличие файла TARGET_FILE в WATCH_FOLDER.
-    Если файл есть и ещё не обработан (по реестру), запускает обработку.
-    Возвращает True, если обработка выполнена, иначе False.
-    """
     target_path = WATCH_FOLDER / TARGET_FILE
     logger.info(f"Проверка файла: {target_path}")
 
@@ -23,22 +18,28 @@ def check_and_process() -> bool:
         logger.info(f"Файл {TARGET_FILE} не найден.")
         return False
 
-    # Проверяем по реестру (только по имени файла, так как путь может меняться)
-    if is_processed(TARGET_FILE):
-        logger.info(f"Файл {TARGET_FILE} уже был обработан ранее (по реестру).")
+    # Получаем время последнего изменения файла
+    try:
+        mtime = target_path.stat().st_mtime
+    except Exception as e:
+        logger.error(f"Не удалось получить время изменения файла: {e}")
+        return False
+
+    # Проверяем по реестру с учётом mtime
+    if is_processed(TARGET_FILE, mtime):
+        logger.info(f"Файл {TARGET_FILE} уже обработан (текущее время изменения совпадает с сохранённым).")
         return False
 
     # Запускаем обработку
-    logger.info(f"Найден новый файл {TARGET_FILE}. Начинаем обработку...")
+    logger.info(f"Найден новый/обновлённый файл {TARGET_FILE}. Начинаем обработку...")
     result_path = process_excel(target_path)
 
     if result_path:
-        # Помечаем в реестре как обработанный
-        # Можно добавить метаданные, например, время обработки (оно уже добавляется в mark_processed)
-        mark_processed(TARGET_FILE, metadata={"source_path": str(target_path)})
+        # Помечаем в реестре как обработанный с указанием mtime
+        mark_processed(TARGET_FILE, mtime, metadata={"source_path": str(target_path)})
         logger.success(f"Файл {TARGET_FILE} успешно обработан. Результат: {result_path}")
 
-        # Архивация и удаление оригинала (функция archive_original сама решает, копировать или нет)
+        # Архивация и удаление оригинала
         archive_original(target_path)
         return True
     else:

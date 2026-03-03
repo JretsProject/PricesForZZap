@@ -38,27 +38,43 @@ def save_registry(registry: List[Dict[str, Any]]) -> None:
         json.dump(registry, f, ensure_ascii=False, indent=2)
 
 
-def is_processed(filename: str, registry: Optional[List[Dict[str, Any]]] = None) -> bool:
+def get_file_record(filename: str, registry: Optional[List[Dict]] = None) -> Optional[Dict]:
     """
-    Проверяет, есть ли файл с указанным именем в реестре.
-    Если реестр не передан, загружает его.
-    """
-    if registry is None:
-        registry = load_registry()
-    return any(entry.get("filename") == filename for entry in registry)
-
-
-def mark_processed(filename: str, metadata: Optional[Dict] = None, registry: Optional[List[Dict]] = None) -> None:
-    """
-    Добавляет запись об обработанном файле в реестр.
-    Если реестр не передан, загружает его.
-    metadata — дополнительные данные (например, время изменения исходного файла)
+    Возвращает запись о файле из реестра по имени, или None, если не найдено.
     """
     if registry is None:
         registry = load_registry()
-    # Создаём новую запись
+    for entry in registry:
+        if entry.get("filename") == filename:
+            return entry
+    return None
+
+def is_processed(filename: str, mtime: float = None, registry: Optional[List[Dict]] = None) -> bool:
+    """
+    Проверяет, обработан ли файл.
+    Если передан mtime, сравнивает его с сохранённым.
+    """
+    record = get_file_record(filename, registry)
+    if record is None:
+        return False
+    if mtime is None:
+        return True  # если mtime не указан, считаем по имени
+    saved_mtime = record.get("mtime")
+    if saved_mtime is None:
+        return True  # старая запись без mtime считаем обработанной
+    return saved_mtime == mtime
+
+def mark_processed(filename: str, mtime: float, metadata: Optional[Dict] = None, registry: Optional[List[Dict]] = None) -> None:
+    """
+    Добавляет запись об обработанном файле, включая время изменения.
+    """
+    if registry is None:
+        registry = load_registry()
+    # Удаляем старую запись, если есть (чтобы обновить mtime)
+    registry = [entry for entry in registry if entry.get("filename") != filename]
     entry = {
         "filename": filename,
+        "mtime": mtime,
         "processed_at": datetime.now().isoformat(),
     }
     if metadata:
