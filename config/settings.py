@@ -113,3 +113,6 @@ PATTERNS = [
 # Паттерны для поиска файлов (используются в модуле контроля цен)
 PURCHASE_PATTERN_ZZAP = "*_zzap_purchase_prices-*.xlsx"
 SALES_PATTERN_ZZAP = "*_zzap_sales_priсes-*.xlsx"
+
+#Параметры загрузки файлов:
+
