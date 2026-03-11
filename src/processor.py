@@ -5,7 +5,7 @@
 import re
 from pathlib import Path
 from typing import Optional
-
+import shutil
 import pandas as pd
 from loguru import logger
 
@@ -74,42 +74,26 @@ def clean_manufacturer(text: str) -> str:
     return text
 
 
-def process_excel(file_path: Path) -> Optional[Path]:
+def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Основная функция обработки файла:
-    - Читает Excel
-    - Применяет очистку
-    - Сохраняет новый файл с суффиксом _for_zzap
-    Возвращает путь к сохранённому файлу или None, если произошла ошибка.
+    Очищает DataFrame, содержащий колонки 'Производитель', 'Наименование' и 'Код товара':
+    - Удаляет полностью пустые строки.
+    - Применяет clean_manufacturer к производителю.
+    - Заменяет пустые значения на "НЕ ОПРЕДЕЛЕН".
+    - Добавляет производителя в наименование (в формате "Наименование [Производитель]").
+    - Возвращает очищенный DataFrame.
+    Логирует количество удалённых строк и установленных "НЕ ОПРЕДЕЛЕН".
     """
-    logger.info(f"Начало обработки файла: {file_path}")
-
-    # Проверка существования файла
-    if not file_path.exists():
-        logger.error(f"Файл не найден: {file_path}")
-        return None
-
-    try:
-        # Читаем Excel, предполагаем, что заголовки в первой строке
-        df = pd.read_excel(file_path, sheet_name="Лист_1", header=0)
-        logger.info(f"Загружено строк: {len(df)}")
-    except Exception as e:
-        logger.error(f"Ошибка чтения Excel: {e}")
-        return None
-
-    # Проверяем наличие необходимых столбцов
-    required_columns = ["Наименование", "Производитель"]
+    # Проверка наличия обязательных колонок
+    required_columns = ["Наименование", "Производитель", "Код товара"]
     for col in required_columns:
         if col not in df.columns:
-            logger.error(f"В файле отсутствует столбец '{col}'")
-            return None
+            raise ValueError(f"В DataFrame отсутствует столбец '{col}'")
 
-    # Счётчики для логирования
-    empty_rows_removed = 0
-    undefined_set = 0
+    # Копируем, чтобы не изменять исходный
+    df = df.copy()
 
-    # Обрабатываем строки
-    # Удаляем строки, полностью пустые (все значения NaN)
+    # Удаление полностью пустых строк
     before = len(df)
     df.dropna(how='all', inplace=True)
     after = len(df)
@@ -117,7 +101,9 @@ def process_excel(file_path: Path) -> Optional[Path]:
     if empty_rows_removed > 0:
         logger.info(f"Удалено полностью пустых строк: {empty_rows_removed}")
 
-    # Обрабатываем столбец "Производитель" и "Наименование"
+    undefined_set = 0  # счётчик для логирования
+
+    # Обрабатываем каждую строку
     for idx, row in df.iterrows():
         # Производитель
         manufacturer = row.get("Производитель")
@@ -139,23 +125,55 @@ def process_excel(file_path: Path) -> Optional[Path]:
             df.at[idx, "Наименование"] = "НЕ ОПРЕДЕЛЕН"
             undefined_set += 1
         else:
-            # Добавляем производителя в скобках, если он не пустой
             manufacturer_clean = df.at[idx, "Производитель"]
             if manufacturer_clean != "НЕ ОПРЕДЕЛЕН":
                 new_name = f"{name} [{manufacturer_clean}]"
             else:
-                new_name = name  # оставляем как есть
+                new_name = name
             df.at[idx, "Наименование"] = new_name
 
-    # Формируем имя выходного файла (с суффиксом)
-    output_filename = file_path.stem + "_for_zzap" + file_path.suffix
+    logger.info(f"Пропусков заполнено 'НЕ ОПРЕДЕЛЕН': {undefined_set}")
+    return df
+
+
+
+def process_excel(file_path: Path) -> Optional[Path]:
+    """
+    Обрабатывает одиночный Excel-файл:
+    - Читает лист "Лист_1"
+    - Очищает данные через clean_dataframe
+    - Сохраняет результат с суффиксом _to_be_sent
+    Возвращает путь к сохранённому файлу или None при ошибке.
+    """
+    logger.info(f"Начало обработки файла: {file_path}")
+
+    if not file_path.exists():
+        logger.error(f"Файл не найден: {file_path}")
+        return None
+
+    try:
+        df = pd.read_excel(file_path, sheet_name="Лист_1", header=0, dtype=str)
+        logger.info(f"Загружено строк: {len(df)}")
+    except Exception as e:
+        logger.error(f"Ошибка чтения Excel: {e}")
+        return None
+
+    try:
+        df = clean_dataframe(df)
+    except ValueError as e:
+        logger.error(f"Ошибка очистки данных: {e}")
+        return None
+
+    # Упорядочивание колонок
+    df = df[['Производитель', 'Код товара', 'Наименование', 'Кол-во', 'Цена']]
+
+    # Формирование имени выходного файла
+    output_filename = file_path.stem + "_to_be_sent" + file_path.suffix
     output_path = file_path.parent / output_filename
 
-    # Сохраняем результат
     try:
         df.to_excel(output_path, sheet_name="Лист_1", index=False)
         logger.success(f"Файл успешно сохранён: {output_path}")
-        logger.info(f"Строк обработано: {len(df)}, пропусков заполнено 'НЕ ОПРЕДЕЛЕН': {undefined_set}")
         return output_path
     except Exception as e:
         logger.error(f"Ошибка сохранения файла: {e}")
@@ -189,3 +207,155 @@ def archive_original(file_path: Path) -> None:
         logger.info(f"Исходный файл удалён: {file_path}")
     except Exception as e:
         logger.error(f"Не удалось удалить исходный файл: {e}")
+
+
+def process_sales_with_purchase(sales_path: Path, purchase_path: Path) -> bool:
+    """
+    Обрабатывает пару файлов: продажи и закупки.
+    - Загружает оба файла.
+    - Сопоставляет по колонке "Код".
+    - Если поставщик из purchase == "АвтоЗапчасть КАМАЗ", заменяет производителя в sales на "ПАО КАМАЗ".
+    - Добавляет колонку "ЦенаЗакупки" из purchase.
+    - Вызывает clean_dataframe для sales.
+    - Сохраняет два файла:
+        * основной: без колонки "ЦенаЗакупки" (с суффиксом _to_be_sent)
+        * дополнительный: с колонкой "ЦенаЗакупки" (с суффиксом _with_purchase)
+    - Архивирует исходные файлы.
+    Возвращает True при успехе, иначе False.
+    """
+    logger.info(f"Обработка пары: продажи={sales_path.name}, закупки={purchase_path.name}")
+
+    # Проверка существования
+    if not sales_path.exists() or not purchase_path.exists():
+        logger.error("Один из файлов не существует")
+        return False
+
+    try:
+        sales_df = pd.read_excel(sales_path, sheet_name="Лист_1", header=0, dtype=str)
+        purchase_df = pd.read_excel(purchase_path, sheet_name="Лист_1", header=0, dtype=str)
+        logger.info(f"Загружено: продажи {len(sales_df)} строк, закупки {len(purchase_df)} строк")
+        
+        # --- ВСТАВИТЬ ЭТОТ БЛОК ---
+        # Переименование колонок в файле закупок для соответствия ожидаемым
+        rename_purchase = {}
+        if 'Итого' in purchase_df.columns:
+            rename_purchase['Итого'] = 'Кол-во'
+        if 'Unnamed: 7' in purchase_df.columns:
+            rename_purchase['Unnamed: 7'] = 'Цена'
+        if rename_purchase:
+            purchase_df.rename(columns=rename_purchase, inplace=True)
+            logger.info(f"Переименованы колонки в файле закупок: {rename_purchase}")
+        # -------------------------
+
+        # ВРЕМЕННО: выводим реальные названия колонок для проверки
+        logger.info(f"Колонки в файле продаж: {list(sales_df.columns)}")
+        logger.info(f"Колонки в файле закупок после переименования: {list(purchase_df.columns)}")
+    except Exception as e:
+        logger.exception(f"Ошибка загрузки: {e}")
+        return False
+
+    # Проверка наличия обязательных колонок
+    required_sales = ["Код", "Производитель", "Наименование", "Кол-во", "Цена"]
+    required_purchase = ["Код", "Поставщик", "Цена"]
+    for col in required_sales:
+        if col not in sales_df.columns:
+            logger.error(f"В файле продаж отсутствует колонка '{col}'")
+            return False
+    for col in required_purchase:
+        if col not in purchase_df.columns:
+            logger.error(f"В файле закупок отсутствует колонка '{col}'")
+            return False
+
+    # Приводим код к строке и убираем лишние пробелы
+    sales_df["Код"] = sales_df["Код"].astype(str).str.strip()
+    purchase_df["Код"] = purchase_df["Код"].astype(str).str.strip()
+
+    # Создаём словарь из purchase: {код: (поставщик, цена)}
+        # Приводим код к строке и убираем лишние пробелы (если ещё не сделано)
+    # (эта часть уже есть выше, но для надёжности можно повторить)
+    sales_df["Код"] = sales_df["Код"].astype(str).str.strip()
+    purchase_df["Код"] = purchase_df["Код"].astype(str).str.strip()
+
+    # Создаём словарь из purchase: {код: (поставщик, цена)}
+    purchase_dict = {}
+    for _, row in purchase_df.iterrows():
+        code = row["Код"]
+        if code == "nan" or code == "":  # пропускаем невалидные коды
+            continue
+        supplier = row.get("Поставщик")
+        price = row.get("Цена")
+        # Обрабатываем пропуски
+        supplier = "" if pd.isna(supplier) else str(supplier).strip()
+        price = "" if pd.isna(price) else str(price).strip()
+        purchase_dict[code] = (supplier, price)
+
+    # Добавляем колонку "ЦенаЗакупки" в sales, заполняем пустой строкой
+    sales_df["ЦенаЗакупки"] = ""
+
+    # Проходим по строкам sales и обновляем
+    for idx, row in sales_df.iterrows():
+        code = row["Код"]
+        if code in purchase_dict:
+            supplier, price = purchase_dict[code]
+            # Замена производителя
+            if supplier.lower() == "автозапчасть камаз":  # уже строка, приведена к нижнему регистру
+                sales_df.at[idx, "Производитель"] = "ПАО КАМАЗ"
+                logger.debug(f"Код {code}: производитель заменён на ПАО КАМАЗ")
+            # Добавление цены закупки
+            sales_df.at[idx, "ЦенаЗакупки"] = price
+        else:
+            logger.debug(f"Код {code} не найден в закупках, цена закупки не добавлена")
+
+    # Переименовываем "Код" в "Код товара" для clean_dataframe
+    #sales_df.rename(columns={"Код": "Код товара"}, inplace=True)
+
+    # Проверяем наличие всех колонок, необходимых для clean_dataframe
+    # clean_dataframe ожидает "Наименование", "Производитель", "Код товара"
+    try:
+        sales_df = clean_dataframe(sales_df)
+    except ValueError as e:
+        logger.error(f"Ошибка clean_dataframe: {e}")
+        return False
+
+    # Упорядочивание колонок для выходного файла (как в process_excel)
+    base_columns = ['Производитель', 'Код товара', 'Наименование', 'Кол-во', 'Цена']
+    # Убедимся, что все колонки присутствуют
+    for col in base_columns:
+        if col not in sales_df.columns:
+            logger.error(f"После очистки отсутствует колонка '{col}'")
+            return False
+
+    # Сохраняем два файла
+    # 1. Основной (без ЦенаЗакупки)
+    main_df = sales_df[base_columns].copy()
+    main_output = sales_path.parent / f"{sales_path.stem}_to_be_sent{sales_path.suffix}"
+    try:
+        main_df.to_excel(main_output, sheet_name="Лист_1", index=False)
+        logger.success(f"Основной файл сохранён: {main_output}")
+    except Exception as e:
+        logger.error(f"Ошибка сохранения основного файла: {e}")
+        return False
+
+    # 2. Дополнительный (с ЦенаЗакупки)
+    # Добавляем колонку ЦенаЗакупки, если она есть
+    if "ЦенаЗакупки" in sales_df.columns:
+        extra_columns = base_columns + ['Код', 'ЦенаЗакупки']
+        extra_df = sales_df[extra_columns].copy()
+        extra_output = sales_path.parent / f"{sales_path.stem}_with_purchase{sales_path.suffix}"
+        try:
+            extra_df.to_excel(extra_output, sheet_name="Лист_1", index=False)
+            logger.success(f"Дополнительный файл сохранён: {extra_output}")
+        except Exception as e:
+            logger.error(f"Ошибка сохранения дополнительного файла: {e}")
+            # Не прерываем выполнение, основной файл уже сохранён
+
+    # Архивирование исходных файлов
+    try:
+        archive_original(sales_path)
+        archive_original(purchase_path)
+        logger.info("Исходные файлы заархивированы")
+    except Exception as e:
+        logger.error(f"Ошибка при архивации: {e}")
+        # Не прерываем, так как обработка уже выполнена
+
+    return True

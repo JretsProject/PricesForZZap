@@ -11,8 +11,12 @@ BASE_DIR = Path(__file__).parent.parent
 
 # Папка мониторинга
 WATCH_FOLDER = Path(os.getenv("WATCH_FOLDER", ""))
-TARGET_FILE = os.getenv("TARGET_FILE", "kamaz_kmv.xlsx")
-OUTPUT_SUFFIX = os.getenv("OUTPUT_SUFFIX", "_for_zzap")
+TARGET_FILE = os.getenv("TARGET_FILE", "")
+OUTPUT_SUFFIX = os.getenv("OUTPUT_SUFFIX", "_to_be_sent")
+
+# Имена файлов для обработки
+SALES_FILE = "prices_for_zzap_sales.xlsx"
+PURCHASE_FILE = "prices_for_zzap_purchase.xlsx"
 
 # Реестр
 REGISTRY_PATH = BASE_DIR / os.getenv("REGISTRY_PATH", "data/registry.json")
@@ -115,4 +119,6 @@ PURCHASE_PATTERN_ZZAP = "*_zzap_purchase_prices-*.xlsx"
 SALES_PATTERN_ZZAP = "*_zzap_sales_priсes-*.xlsx"
 
 #Параметры загрузки файлов:
+PURCHASE_COLUMNS = []
+SALES_COLUMNS = []
 
